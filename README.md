@@ -58,6 +58,9 @@ npx n8n
 
 Open index.html in browser
 
+## Setup Note
+Add your API key inside n8n credentials before running the workflow.
+
 ⸻
 
 ## 💰 Cost Estimation
