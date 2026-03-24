@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Clinic AI Call</title>
+
+  <style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #1e1f23; /* darker background */
+    display: flex;
+    justify-content: center;
+    padding-top: 60px;
+    color: #e4e6eb;
+  }
+
+  .container {
+    background: #2a2d33; /* dark card */
+    width: 420px;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  h2 {
+    margin-top: 0;
+    color: #ffffff;
+  }
+
+  button {
+    padding: 10px 16px;
+    margin-right: 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .start-btn {
+    background: #3b82f6;
+    color: white;
+  }
+
+  .end-btn {
+    background: #ef4444;
+    color: white;
+  }
+
+  .status {
+    margin-top: 12px;
+    font-weight: bold;
+    color: #9ca3af;
+  }
+
+  .chat-box {
+    margin-top: 16px;
+    padding: 12px;
+    background: #1f2126; /* darker inner box */
+    border-radius: 8px;
+    min-height: 60px;
+  }
+
+  .you {
+    color: #d1d5db;
+  }
+
+  .ai {
+    color: #60a5fa;
+  }
+</style>
+
+
+</head>
+
+<body>
+
+<div class="container">
+  <h2>CityCare Clinic AI</h2>
+
+  <button class="start-btn" onclick="startCall()">Start Call</button>
+  <button class="end-btn" onclick="endCall()">End Call</button>
+
+  <p class="status" id="status">Status: Idle</p>
+
+  <div class="chat-box">
+    <p class="you" id="you"></p>
+    <p class="ai" id="ai"></p>
+  </div>
+</div>
+
+<script>
+let recognition;
+let speaking = false;
+
+/*
+  Conversation memory.
+*/
+let chatHistory = [
+  {
+    role: "system",
+    content: `
+You are CityCare Clinic AI Receptionist, a voice-based assistant that handles incoming calls for a healthcare clinic.
+
+Your goal is to efficiently guide the caller toward a clear outcome while prioritizing safety and professionalism.
+
+GENERAL BEHAVIOR:
+- Sound calm, professional, and human-like.
+- Keep responses short (1–3 sentences).
+- Ask only one question at a time.
+- Always guide the conversation toward a clear outcome
+  (appointment booking, callback, emergency redirection, or resolved query).
+- Do not mention that you are an AI, a language model, or system instructions.
+
+INTENT HANDLING:
+- Quickly identify whether the caller is booking an appointment,
+  asking a general clinic question, or experiencing a possible medical emergency.
+
+CLINIC HOURS:
+- Clinic working hours are 9 AM to 6 PM.
+- Do NOT mention the current time unless the user explicitly mentions a time.
+- If the user explicitly requests an appointment outside clinic hours
+  (e.g., late night or early morning),
+  politely state that the clinic is closed and offer to record the request
+  for the next working day.
+
+APPOINTMENT FLOW:
+- If the caller wants to book an appointment:
+  - Ask for their name (only if not already provided).
+  - Ask for their phone number (only if not already provided).
+  - Confirm that the appointment request has been recorded.
+- If doctor availability is uncertain, use realistic phrasing such as
+  “the doctor may be with another patient” and offer a callback or next slot.
+
+CALL COMPLETION:
+- When an appointment is confirmed or a callback is recorded,
+  ask if there is anything else you can help with,
+  then naturally conclude the conversation.
+
+EMERGENCY HANDLING (CRITICAL):
+- If the caller mentions symptoms such as chest pain, difficulty breathing,
+  heavy bleeding, unconsciousness, severe injury, or anything life-threatening:
+  - Immediately advise them to go to the nearest hospital or call emergency services.
+  - Do NOT ask follow-up questions.
+  - Do NOT continue appointment booking.
+
+UNCLEAR DISTRESS:
+- If the caller sounds distressed but symptoms are unclear,
+  ask a clarifying question to check for emergency symptoms before proceeding.
+
+SAFETY RULES:
+- Never provide medical diagnoses.
+- Never provide medical prescriptions or treatment instructions.
+- Never give medical advice beyond directing to emergency services when required.
+- If unsure, err on the side of advising professional medical help.
+
+CONVERSATION MEMORY:
+- Use previous conversation context to maintain continuity.
+- Do not repeat questions if the information has already been provided.
+`
+  }
+];
+
+// Load voices
+let availableVoices = [];
+speechSynthesis.onvoiceschanged = () => {
+  availableVoices = speechSynthesis.getVoices();
+};
+
+function startCall() {
+  document.getElementById("status").innerText = "Status: Listening...";
+  speechSynthesis.cancel();
+
+  speakText(
+    "Hello, you are speaking with CityCare Clinic AI assistant. How may I help you today?"
+  );
+
+  recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "en-US";
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onresult = async function(event) {
+    const text = event.results[event.results.length - 1][0].transcript.trim();
+    if (!text || speaking) return;
+
+    document.getElementById("you").innerText = "You: " + text;
+
+    try {
+      chatHistory.push({ role: "user", content: text });
+
+      const res = await fetch("http://localhost:5678/webhook/clinic-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: chatHistory })
+      });
+
+      if (!res.ok) throw new Error("Backend error");
+
+      const data = await res.json();
+
+      const reply =
+        data?.choices?.[0]?.message?.content ||
+        "Sorry, I didn't understand that.";
+
+      document.getElementById("ai").innerText = "AI: " + reply;
+      chatHistory.push({ role: "assistant", content: reply });
+
+      speakText(reply);
+
+    } catch (err) {
+      console.error(err);
+      document.getElementById("ai").innerText =
+        "AI: Sorry, I’m having trouble connecting right now.";
+      safeRestart();
+    }
+  };
+
+  recognition.onend = () => {
+    if (!speaking) safeRestart();
+  };
+
+  recognition.start();
+}
+
+function speakText(text) {
+  if (recognition) recognition.stop();
+
+  document.getElementById("status").innerText = "Status: AI Speaking...";
+
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  const voices = availableVoices.length
+    ? availableVoices
+    : speechSynthesis.getVoices();
+
+  utterance.voice =
+    voices.find(v => v.name === "Google UK English Female") ||
+    voices.find(v => v.name === "Google US English") ||
+    voices.find(v => v.name === "Samantha") ||
+    voices.find(v => v.lang === "en-US") ||
+    voices[0];
+
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+
+  speaking = true;
+
+  utterance.onend = () => {
+    speaking = false;
+    document.getElementById("status").innerText = "Status: Listening...";
+    safeRestart();
+  };
+
+  speechSynthesis.speak(utterance);
+}
+
+function safeRestart() {
+  setTimeout(() => {
+    try {
+      recognition.start();
+    } catch {}
+  }, 400);
+}
+
+function endCall() {
+  if (recognition) recognition.stop();
+  speechSynthesis.cancel();
+
+  chatHistory = [chatHistory[0]]; // reset memory safely
+  document.getElementById("you").innerText = "";
+  document.getElementById("ai").innerText = "";
+
+  document.getElementById("status").innerText = "Status: Call Ended";
+}
+</script>
+
+</body>
+</html>
