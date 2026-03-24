@@ -1,0 +1,84 @@
+{
+  "name": "clinic-ai",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clinic-ai",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "45d4e91a-88a1-472a-9331-efe2d0c52d7b",
+      "name": "Webhook",
+      "webhookId": "fd9304f1-1f44-44c7-a9bb-b4e7b9e8b1bb"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  model: \"llama-3.1-8b-instant\",\n  messages: $json.body.messages,\n  temperature: 0.3\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "11ab3dce-a376-46b5-8aa8-e4d00cfefc0e",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7b66e6f6-aa3a-4689-8073-fab829922a8f",
+  "meta": {
+    "instanceId": "baa9477da1936ce6c432ddfb01e64a8526c113fae520fcb06541af6ca716e7aa"
+  },
+  "id": "x1SIjgBG8SG-eVwgPzYIg",
+  "tags": []
+}
